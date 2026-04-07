@@ -14,7 +14,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/leaves', require('./routes/leaves'));
 app.use('/api/admin', require('./routes/admin'));
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (_, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
 const PORT = process.env.PORT || 5000;
 initDB().then(() => {
