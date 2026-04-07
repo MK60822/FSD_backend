@@ -14,9 +14,10 @@ const pool = new Pool(
 );
 
 const initDB = async () => {
-  const client = await pool.connect();
-  console.log('DB connected successfully');
+  let client;
   try {
+    client = await pool.connect();
+    console.log('DB connected successfully');
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -52,8 +53,11 @@ const initDB = async () => {
       );
     `);
     console.log('Database initialized successfully');
+  } catch (err) {
+    console.error('DB init error details:', err.message, err.code, err.stack);
+    throw err;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
