@@ -6,7 +6,7 @@ const { initDB } = require('./db');
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (origin, callback) => callback(null, true),
   credentials: true,
 }));
 app.use(express.json());
