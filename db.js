@@ -15,6 +15,7 @@ const pool = new Pool(
 
 const initDB = async () => {
   const client = await pool.connect();
+  console.log('DB connected successfully');
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
