@@ -4,18 +4,6 @@ const cors = require('cors');
 const { initDB } = require('./db');
 
 const app = express();
-let dbInitPromise;
-
-const ensureDbInitialized = async () => {
-  if (!dbInitPromise) {
-    dbInitPromise = initDB().catch((error) => {
-      dbInitPromise = undefined;
-      throw error;
-    });
-  }
-
-  return dbInitPromise;
-};
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
@@ -23,11 +11,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Vercel functions do not have a persistent bootstrap phase, so ensure the DB
-// schema is ready before route handlers execute on a cold start.
 app.use(async (_req, _res, next) => {
   try {
-    await ensureDbInitialized();
+    await initDB();
     next();
   } catch (error) {
     next(error);
@@ -47,4 +33,4 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ message: 'Internal server error' });
 });
 
-module.exports = { app, ensureDbInitialized };
+module.exports = app;

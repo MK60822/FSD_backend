@@ -13,7 +13,10 @@ const pool = new Pool(
       }
 );
 
+let initialized = false;
+
 const initDB = async () => {
+  if (initialized) return;
   let client;
   try {
     client = await pool.connect();
@@ -52,6 +55,7 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    initialized = true;
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('DB init error details:', err.message, err.code, err.stack);
