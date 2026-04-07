@@ -1,121 +1,63 @@
-const { createClient } = require('@libsql/client');
+const { Pool } = require('pg');
 require('dotenv').config();
 
-const databaseUrl = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
-
-if (!databaseUrl) {
-  throw new Error('TURSO_DATABASE_URL is required');
-}
-
-const db = createClient({
-  url: databaseUrl,
-  authToken,
-});
-
-const normalizeSql = (sql) => sql.replace(/\$\d+/g, '?');
-
-const executeQuery = async (sql, params = []) => {
-  const result = await db.execute({
-    sql: normalizeSql(sql),
-    args: params,
-  });
-
-  return {
-    rows: result.rows.map((row) => ({ ...row })),
-    rowsAffected: Number(result.rowsAffected || 0),
-  };
-};
-
-const createTransactionClient = () => {
-  let active = false;
-
-  return {
-    async query(sql, params = []) {
-      const trimmed = sql.trim().toUpperCase();
-      if (trimmed === 'BEGIN') {
-        await db.execute('BEGIN');
-        active = true;
-        return { rows: [], rowsAffected: 0 };
+const pool = new Pool(
+  process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+    : {
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT,
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
       }
-
-      if (trimmed === 'COMMIT') {
-        await db.execute('COMMIT');
-        active = false;
-        return { rows: [], rowsAffected: 0 };
-      }
-
-      if (trimmed === 'ROLLBACK') {
-        await db.execute('ROLLBACK');
-        active = false;
-        return { rows: [], rowsAffected: 0 };
-      }
-
-      return executeQuery(sql, params);
-    },
-    async release() {
-      if (active) {
-        await db.execute('ROLLBACK');
-        active = false;
-      }
-    },
-  };
-};
-
-const pool = {
-  query: executeQuery,
-  async connect() {
-    return createTransactionClient();
-  },
-};
+);
 
 const initDB = async () => {
+  let client;
   try {
-    await db.execute('PRAGMA foreign_keys = ON');
+    client = await pool.connect();
     console.log('DB connected successfully');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(20) DEFAULT 'employee',
+        joining_date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
 
-    await db.batch([
-      `
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
-          password TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'employee',
-          joining_date TEXT NOT NULL DEFAULT (date('now')),
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `,
-      `
-        CREATE TABLE IF NOT EXISTS leave_balances (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-          total_leaves INTEGER NOT NULL DEFAULT 20,
-          used_leaves INTEGER NOT NULL DEFAULT 0,
-          remaining_leaves INTEGER NOT NULL DEFAULT 20
-        )
-      `,
-      `
-        CREATE TABLE IF NOT EXISTS leave_requests (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          leave_type TEXT NOT NULL,
-          start_date TEXT NOT NULL,
-          end_date TEXT NOT NULL,
-          days INTEGER NOT NULL,
-          reason TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'pending',
-          admin_comment TEXT,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `,
-    ], 'write');
+      CREATE TABLE IF NOT EXISTS leave_balances (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        total_leaves INTEGER DEFAULT 20,
+        used_leaves INTEGER DEFAULT 0,
+        remaining_leaves INTEGER DEFAULT 20,
+        UNIQUE(user_id)
+      );
 
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        leave_type VARCHAR(50) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        days INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        admin_comment TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('DB init error details:', err.message, err.code, err.stack);
     throw err;
+  } finally {
+    if (client) client.release();
   }
 };
 
