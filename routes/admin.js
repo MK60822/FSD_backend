@@ -42,7 +42,7 @@ router.patch('/requests/:id', authenticate, isAdmin, async (req, res) => {
     if (leave.status !== 'pending') return res.status(400).json({ message: 'Already processed' });
 
     await client.query(
-      'UPDATE leave_requests SET status=$1, admin_comment=$2, updated_at=NOW() WHERE id=$3',
+      'UPDATE leave_requests SET status=$1, admin_comment=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3',
       [status, admin_comment || null, id]
     );
 
